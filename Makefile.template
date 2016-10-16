@@ -1,0 +1,401 @@
+# The "MODULE" variable must be set for every Makefile.
+# Each module is its own separate compilation entity.
+#
+# List of rules:
+#   all: Compiles all source and assembly files and any executable or library.
+#   clean: Deletes all object files, libraries, executables, and dependency files
+#       from the "build" directory.
+#   debug: Runs the executable in the debugger specified by DEBUG_EXEC.
+#   docs: Calls the DOCUMENT executable (typically doxygen)
+#       on the DOCUMENT_ARGS parameter.
+#   install: Copies the compiled libraries and executable to the DEST path.
+#       If HEADER or INLINES is set, those files will be copied to
+#       $DEST/include/$MODULE directory. Requires DEST to be set.
+#   run: Executes the compiled executable. If ARGS is set, that will be passed
+#       as the arguments for the executable. Requires EXECUTABLE to be set.
+#   setup: Creates the dependency and module directories in the "build" dir and
+#       creates the dependency files of the source files.
+#   start: Starts the System V "DAEMON" daemon. Requires DAEMON to be set.
+#   stop: Stops the System V "DAEMON" daemon. Requires DAEMON to be set.
+#
+# List of Makefile variables:
+#   AFLAGS = Flags used to compile assembly files.
+#   ARGS = Arguments to pass to the executable when calling the "run" rule.
+#   ASSEMBLY = List of assembily files to compile. Extensions: .asm, .S, .s
+#   CFLAGS = Flags used to compile source files.
+#   DAEMON = The System V daemon used for the "start" and "stop" rules.
+#   DEBUG = If set to "1", compilation will include debugging symbols and
+#       the DEFINES will include "-DDEBUG".
+#   DEFINES = "-D" defines used during compilation
+#   DEST = The file path where the executable or library will be saved for
+#       the "install" rule.
+#   DOCUMENT = The documentation executable to call for the "docs" rule,
+#       such as doxygen.
+#   DOCUMENT_ARGS = The arguments to pass to the document executable.
+#   EXECUTABLE = The name of the executable to compile.
+#   HEADERS = List of header files. Used during the "install" rule and
+#       copied into the $DEST/include/$MODULE directory. Extensions: .h, .hh, .hpp
+#   INCLUDES = List of paths to look for header files.
+#   INLINES = List of inline files. Used during the "install" rule and
+#       copied into the $DEST/include/$MODULE directory. Extensions: .icc, .inl
+#   LIBS = List of libraries and paths to link to the compiled executable or library.
+#   MODULE = Name of the module. This must be set!
+#   ROOTDIR = The location of the "build" directory relative to the Makefile.
+#   SOURCES = List of source files to compile. Extensions: .c, .cc, .cpp, .cxx
+#   SHARED_LIB = Name of the shared library.
+#   STATIC_LIB = Name of the static library.
+#   THREAD_SAFE = If set to "1", DEFINES includes "-DTHREAD_SAFE".
+#   VERBOSE = If set to "1", the entire compilation line is printed out.
+#       Useful for debugging compilation problems.
+
+ARCHIVER=ar rcs
+CC=g++
+DEBUG_EXEC=gdb --args
+CMD_SEP=;
+COPY=cp -r
+DEL=rm -rf
+DOCUMENT=doxygen
+MAKE_DIR=mkdir -p
+MOVE=mv
+PRINT=echo
+
+NO_DEST_FIRST="No destination provided!\n"
+NO_DEST_SECOND="Please set the DEST environment variable or as a build parameter."
+
+ifndef ROOTDIR
+ROOTDIR=.
+endif # ROOTDIR undefined
+
+ifeq ($(ROOTDIR),)
+ROOTDIR=.
+endif # ROOTDIR == ""
+
+ifndef BUILDDIR
+BUILDDIR=$(ROOTDIR)/build
+endif # BUILDDIR undefined
+
+INCLUDES+=-I.
+ifneq ($(ROOTDIR),.)
+INCLUDES+=-I$(ROOTDIR)
+endif # ROOTDIR != .
+
+ifndef MODULE
+$(error A MODULE name is required for the Makefile!)
+endif # MODULE undefined
+
+ifdef SHARED_LIB
+ifeq ($(SHARED_LIB),)
+undefine SHARED_LIB
+endif # SHARED_LIB == ""
+endif # SHARED_LIB defined
+
+ifdef STATIC_LIB
+ifeq ($(STATIC_LIB),)
+undefine STATIC_LIB
+endif # STATIC_LIB == ""
+endif # STATIC_LIB defined
+
+ifdef EXECUTABLE
+ifeq ($(EXECUTABLE),)
+undefine EXECUTABLE
+endif # EXECUTABLE == ""
+endif # EXECUTABLE defined
+
+ifndef ARGS
+ARGS=
+endif # ARGS not defined
+
+ifdef DEST
+ifneq ($(DEST),)
+undefine DEST
+endif # DEST == ""
+endif # DEST defined
+
+LIBS+=
+DEFINES+=
+AFLAGS+=
+
+ifdef THREAD_SAFE
+DEFINES+= -DTHREAD_SAFE
+endif # THREAD_SAFE defined
+
+ifdef DEBUG
+CFLAGS+= -g -O0 -rdynamic
+DEFINES+= -DDEBUG
+else # DEBUG
+CFLAGS+= -O2
+endif # DEBUG defined
+
+ifdef VERBOSE
+VRBS=
+else # VERBOSE
+VRBS=@
+endif # VERBOSE defined
+
+ifdef SHARED_LIB
+CFLAGS+= -fPIC
+endif # SHARED_LIB defined
+
+CFLAGS+= \
+    -pedantic-errors \
+    -fno-elide-constructors \
+    -fno-weak \
+    -fstack-protector \
+    -fstrict-aliasing \
+    -fstrict-overflow \
+    -ansi \
+    -std=c++11 \
+    -Waddress \
+    -Wcast-align \
+    -Wcast-qual \
+    -Wclobbered \
+    -Wctor-dtor-privacy \
+    -Wdelete-non-virtual-dtor \
+    -Wdisabled-optimization \
+    -Wempty-body \
+    -Wenum-compare \
+    -Werror \
+    -Wfatal-errors \
+    -Winit-self \
+    -Winline \
+    -Winvalid-pch \
+    -Wlogical-op \
+    -Wlong-long \
+    -Wmaybe-uninitialized \
+    -Wmissing-declarations \
+    -Wmissing-field-initializers \
+    -Wno-aggressive-loop-optimizations \
+    -Wno-div-by-zero \
+    -Wno-long-long \
+    -Wnon-virtual-dtor \
+    -Wunsafe-loop-optimizations \
+    -Wno-unused-function \
+    -Wold-style-cast \
+    -Woverlength-strings \
+    -Woverloaded-virtual \
+    -Wpacked \
+    -Wpacked-bitfield-compat \
+    -Wpadded \
+    -Wpointer-arith \
+    -Wredundant-decls \
+    -Wreorder \
+    -Wsign-compare \
+    -Wsign-conversion \
+    -Wsizeof-pointer-memaccess \
+    -Wstack-protector \
+    -Wstrict-overflow=5 \
+    -Wtype-limits \
+    -Wuninitialized \
+    -Wunused-but-set-parameter \
+    -Wunused-but-set-variable \
+    -Wunused-parameter \
+    -Wunused-value \
+    -Wunused-variable \
+    -Wuseless-cast \
+    -Wvector-operation-performance \
+    -Wvla \
+    -Wvolatile-register-var \
+    -Wwrite-strings \
+
+ifndef SOURCES
+SOURCES=$(wildcard *.cpp)
+SOURCES+=$(wildcard *.c)
+SOURCES+=$(wildcard *.cc)
+SOURCES+=$(wildcard *.cxx)
+endif # SOURCES undefined
+
+ifndef HEADERS
+HEADERS=$(wildcard *.h)
+HEADERS+=$(wildcard *.hh)
+HEADERS+=$(wildcard *.hpp)
+endif # HEADERS undefined
+
+ifndef INLINES
+INLINES=$(wildcard *.icc)
+INLINES=$(wildcard *.inl)
+endif # INLINES undefined
+
+ifndef ASSEMBLY
+ASSEMBLY=$(wildcard *.s)
+ASSEMBLY+=$(wildcard *.asm)
+ASSEMBLY+=$(wildcard *.S)
+endif # ASSEMBLY undefined
+
+VPATH=$(sort $(dir $(SOURCES)))
+vpath %.cpp $(sort $(dir $(SOURCES)))
+
+OBJS1=$(addprefix $(BUILDDIR)/$(MODULE)/,$(notdir $(SOURCES)))
+OBJS2=$(OBJS1:.cpp=.o)
+OBJS3=$(OBJS2:.cc=.o)
+OBJS4=$(OBJS3:.cxx=.o)
+OBJS=$(OBJS4:.c=.o)
+
+# Assembly object files.
+ABJS1=$(addprefix $(BUILDDIR)/$(MODULE)/,$(notdir $(ASSEMBLY)))
+ABJS2=$(ABJS1:.asm=.o)
+ABJS3=$(ABJS2:.s=.o)
+ABJS=$(ABJS3:.S=.o)
+
+# Map source object files to source files.
+$(foreach source,$(SOURCES),$(eval $(notdir \
+    $(patsubst %.cpp,%.o,\
+    $(patsubst %.c,%.o,\
+    $(patsubst %.cc,%.o, \
+    $(patsubst %.cxx,%.o,$(source)))))) = $(source)))
+
+# Map assembly object files to assembly files.
+$(foreach source,$(ASSEMBLY),$(eval $(notdir \
+    $(patsubst %.asm,%.o,\
+    $(patsubst %.s,%.o,\
+    $(patsubst %.S,%.o,$(source))))) = $(source)))
+
+all:: setup $(OBJS) $(ABJS)
+
+$(OBJS):
+	@$(PRINT) "# Compiling $(notdir $(basename $@))"
+	@$(if $<,$(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -MM $< | \
+        sed "s|^$(notdir $@)|$(BUILDDIR)/$(MODULE)/$(notdir $@)|" > \
+        $(BUILDDIR)/depends/$(MODULE)/$(notdir $(@:.o=.depend)))
+	@if [ "$<" = "" ]; then \
+        if [ -e "$($(notdir $@))" ]; then\
+            $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -c $($(notdir $@)) -o $@; \
+        else echo "It is necessary to run make run first!"; fi; \
+    else $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -c $< -o $@; fi;
+	@$(if $(VRBS),,$(PRINT) $(CMD_SEP))
+
+$(ABJS):
+	@$(PRINT) "# Compiling $(notdir $(basename $@))"
+	@$(if $<,$(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -MM $< | \
+        sed "s|^$(notdir $@)|$(BUILDDIR)/$(MODULE)/$(notdir $@)|" > \
+        $(BUILDDIR)/depends/$(MODULE)/$(notdir $(@:.lo=.depend)))
+	$(VRBS) $(CC) $(AFLAGS) $(DEFINES) $(INCLUDES) -c $< -o $@
+	@$(if $(VRBS),,$(PRINT) $(CMD_SEP))
+
+clean::
+	-@$(DEL) $(ABJS) $(OBJS) $(BUILDDIR)/depends/$(MODULE)/*.depend
+
+# Executable.
+ifdef EXECUTABLE
+all:: $(BUILDDIR)/$(MODULE)/$(EXECUTABLE)
+
+$(BUILDDIR)/$(MODULE)/$(EXECUTABLE): $(OBJS) $(ABJS)
+	@$(PRINT) "# Linking $(EXECUTABLE)"
+	$(VRBS) $(CC) $(CFLAGS) $(ABJS) $(OBJS) $(LIBS) \
+        -o $(BUILDDIR)/$(MODULE)/$(EXECUTABLE)
+
+install:: $(BUILDDIR)/$(MODULE)/$(EXECUTABLE)
+	@if [ ! -d "$(DEST)/bin" ]; \
+        then $(MAKE_DIR) $(DEST)/bin; fi
+	$(VRBS) $(COPY) $(BUILDDIR)/$(MODULE)/$(EXECUTABLE) $(DEST)/bin/.
+
+clean::
+	-@$(DEL) $(BUILDDIR)/$(MODULE)/$(EXECUTABLE)
+
+run: all
+	@$(BUILDDIR)/$(MODULE)/$(EXECUTABLE) $(ARGS)
+
+ifdef DEBUG
+ifdef DEBUG_EXEC
+
+debug: $(BUILDDIR)/$(MODULE)/$(EXECUTABLE)
+	@$(DEBUG_EXEC) $(BUILDDIR)/$(MODULE)/$(EXECUTABLE) $(ARGS)
+
+endif # DEBUG_EXEC
+endif # DEBUG
+
+endif # EXECUTABLE
+
+# Shared Library.
+ifdef SHARED_LIB
+all:: $(BUILDDIR)/$(MODULE)/$(SHARED_LIB)
+
+$(BUILDDIR)/$(MODULE)/$(SHARED_LIB): $(OBJS) $(ABJS)
+	@$(PRINT) "# Linking $(SHARED_LIB)"
+	$(VRBS) $(CC) -shared $(CFLAGS) $(ABJS) $(OBJS) $(LIBS) \
+        -o $(BUILDDIR)/$(MODULE)/$(SHARED_LIB)
+
+ifdef DEST
+install:: $(BUILDDIR)/$(MODULE)/$(SHARED_LIB)
+	@if [ ! -d "$(DEST)/lib" ]; then $(MAKE_DIR) $(DEST)/lib; fi
+	@$(COPY) $(BUILDDIR)/$(MODULE)/$(SHARED_LIB) $(DEST)/lib/.
+endif # DEST
+
+clean::
+	-@$(DEL) $(BUILDDIR)/$(MODULE)/$(SHARED_LIB)
+endif # SHARED_LIB
+
+# Static Library.
+ifdef STATIC_LIB
+all:: $(BUILDDIR)/$(MODULE)/$(STATIC_LIB)
+
+$(BUILDDIR)/$(MODULE)/$(STATIC_LIB): $(OBJS) $(ABJS)
+	@$(PRINT) "# Archiving $(STATIC_LIB)"
+	$(VRBS) $(ARCHIVER) $(BUILDDIR)/$(MODULE)/$(STATIC_LIB) $(ABJS) $(OBJS)
+
+ifdef DEST
+install:: $(BUILDDIR)/$(MODULE)/$(STATIC_LIB)
+	@if [ ! -d "$(DEST)/lib" ]; then $(MAKE_DIR) $(DEST)/lib; fi
+	@$(COPY) $(BUILDDIR)/$(MODULE)/$(STATIC_LIB) $(DEST)/lib/.
+endif # DEST
+
+clean::
+	-@$(DEL) $(BUILDDIR)/$(MODULE)/$(STATIC_LIB)
+endif # STATIC_LIB
+
+# Install the header and inline files.
+ifdef DEST
+ifneq "$(or $(HEADERS), $(INLINES))" ""
+# Header Install.
+install::
+	@if [ ! -d "$(DEST)/include/$(MODULE)" ]; \
+        then $(MAKE_DIR) $(DEST)/include/$(MODULE); fi
+	@$(foreach elem,$(HEADERS),$(COPY) $(elem) $(DEST)/include/$(MODULE)/. $(CMD_SEP))
+	@$(foreach elem,$(INLINES),$(COPY) $(elem) $(DEST)/include/$(MODULE)/. $(CMD_SEP))
+endif # HEADERS or INLINES is defined
+else # DEST
+install::
+	@$(PRINT) $(NO_DEST_FIRST)$(NO_DEST_SECOND)
+endif # DEST
+
+# Rules to start and stop the Sytem V daemon.
+ifdef DAEMON
+start:
+	/etc/init.d/$(DAEMON) start
+
+stop:
+	/etc/init.d/$(DAEMON) stop
+endif # DAEMON
+
+setup:
+	@if [ ! -d "$(BUILDDIR)" ]; then $(MAKE_DIR) $(BUILDDIR); fi
+	@if [ ! -d "$(BUILDDIR)/depends" ]; then $(MAKE_DIR) $(BUILDDIR)/depends; fi
+	@if [ ! -d "$(BUILDDIR)/depends/$(MODULE)" ]; \
+        then $(MAKE_DIR) $(BUILDDIR)/depends/$(MODULE); fi
+	@if [ ! -d "$(BUILDDIR)/$(MODULE)" ]; \
+        then $(MAKE_DIR) $(BUILDDIR)/$(MODULE); fi
+	$(VRBS) $(foreach file,$(SOURCES),\
+        $(if $(wildcard $(BUILDDIR)/depends/$(MODULE)/$(notdir $(file:$(suffix $(file))=.depend))),,\
+        $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -MM $(file) | \
+        sed "s|^$(notdir $(file:$(suffix $(file))=\\.o))|$(BUILDDIR)/$(MODULE)/$(notdir $(file:$(suffix $(file))=.o))|" > \
+        $(BUILDDIR)/depends/$(MODULE)/$(notdir $(file:$(suffix $(file))=.depend)) $(CMD_SEP)))
+	$(VRBS) $(foreach file,$(ASSEMBLY),\
+        $(if $(wildcard $(BUILDDIR)/depends/$(MODULE)/$(notdir $(file:$(suffix $(file))=.depend))),,\
+        $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -MM $(file) | \
+        sed "s|^$(notdir $(file:$(suffix $(file))=\\.o))|$(BUILDDIR)/$(MODULE)/$(notdir $(file:$(suffix $(file))=.o))|" > \
+        $(BUILDDIR)/depends/$(MODULE)/$(notdir $(file:$(suffix $(file))=.depend)) $(CMD_SEP)))
+
+ifndef DOCUMENT
+DOCUMENT=doxygen
+endif # DOCUMENT is not defined
+ifeq ($(DOCUMENT),)
+DOCUMENT=doxygen
+endif # DOCUMENT is empty
+
+ifdef DOCUMENT_ARGS
+ifneq ($(DOCUMENT_ARGS),)
+docs: $(HEADERS)
+	@$(DOCUMENT) $(DOCUMENT_ARGS)
+endif # DOCUMENT_ARGS != ""
+endif # DOCUMENT_ARGS
+
+-include $(BUILDDIR)/depends/$(MODULE)/*.depend
